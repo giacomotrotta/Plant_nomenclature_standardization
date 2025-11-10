@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Plant Name Normalizer</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <!-- SheetJS per leggere Excel -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+  <style>
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      margin: 2rem;
+      max-width: 1200px;
+    }
+    h1 {
+      font-size: 1.6rem;
+      margin-bottom: 1rem;
+    }
+    .card {
+      border: 1px solid #ddd;
+      border-radius: 12px;
+      padding: 1rem 1.2rem;
+      margin-bottom: 1rem;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.04);
+    }
+    label {
+      display: block;
+      margin-bottom: 0.4rem;
+      font-weight: 600;
+    }
+    select, input[type=file], button {
+      padding: 0.4rem 0.6rem;
+      font-size: 0.95rem;
+      margin-bottom: 0.6rem;
+    }
+    button {
+      border-radius: 8px;
+      border: 1px solid #ccc;
+      cursor: pointer;
+    }
+    button:hover {
+      box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+    }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin-top: 1rem;
+      font-size: 0.85rem;
+    }
+    th, td {
+      border: 1px solid #eee;
+      padding: 0.3rem 0.4rem;
+    }
+    th {
+      background: #f7f7f7;
+      font-weight: 600;
+    }
+    .small {
+      font-size: 0.8rem;
+      color: #666;
+    }
+  </style>
+</head>
+<body>
+  <h1>Plant Name Normalizer (POWO-ready)</h1>
+
+  <div class="card">
+    <label for="fileInput">1. Carica il file Excel</label>
+    <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" />
+    <div id="fileInfo" class="small"></div>
+  </div>
+
+  <div class="card" id="columnSelectCard" style="display:none;">
+    <label for="columnSelect">2. Seleziona la colonna con i nomi delle specie</label>
+    <select id="columnSelect"></select>
+    <div class="small">Puoi usare uno standard (es. <code>Species_name</code>) o scegliere manualmente.</div>
+    <button id="runBtn">3. Esegui normalizzazione di base</button>
+  </div>
+
+  <div class="card" id="resultsCard" style="display:none;">
+    <h2>Risultati</h2>
+    <div class="small">
+      Per ora: cleaning + deduplica. Qui collegherai il motore POWO/WCVP
+      (via API o dizionario locale).
+    </div>
+    <div id="resultSummary" class="small"></div>
+    <div id="tableContainer"></div>
+    <button id="downloadBtn">Scarica CSV normalizzato</button>
+  </div>
+
+<script>
+let originalData = [];
+let normalized = [];
+
+// --- 1. Lettura file ---
+document.getElementById('fileInput').addEventListener('change', function(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = function(evt) {
+    const data = new Uint8Array(evt.target.result);
+    const workbook = XLSX.read(data, {type: 'array'});
+    const firstSheetName = workbook.SheetNames[0];
+    const sheet = workbook.Sheets[firstSheetName];
+    originalData = XLSX.utils.sheet_to_json(sheet, {defval: ""}); // array di oggetti
+
+    document.getElementById('fileInfo').innerText =
+      `Foglio letto: ${firstSheetName} — ${originalData.length} righe`;
+
+    populateColumnSelect(originalData);
+  };
+  reader.readAsArrayBuffer(file);
+});
+
+function populateColumnSelect(data) {
+  if (!data || data.length === 0) return;
+  const cols = Object.keys(data[0]);
+  const select = document.getElementById('columnSelect');
+  select.innerHTML = "";
+  cols.forEach(col => {
+    const opt = document.createElement('option');
+    opt.value = col;
+    opt.textContent = col;
+    if (col.toLowerCase().includes("species")) opt.selected = true;
+    select.appendChild(opt);
+  });
+  document.getElementById('columnSelectCard').style.display = 'block';
+}
+
+// --- 2. Cleaning base del nome ---
+function cleanName(name) {
+  if (!name) return "";
+  let x = String(name).trim();
+
+  // normalizza spazi
+  x = x.replace(/\s+/g, " ");
+
+  // rimuove cf., aff., sp., gruppo ecc (molto semplice, adattabile)
+  x = x.replace(/\b(cf\.|aff\.|nr\.|sp\.|spp\.|group|gr\.)\b/gi, "");
+  x = x.replace(/\?/g, "");
+
+  x = x.replace(/\s+/g, " ").trim();
+
+  // opzionale: normalizza maiuscole: Genere capitalizzato, resto minuscolo
+  const parts = x.split(" ");
+  if (parts.length > 0) {
+    parts[0] = parts[0].charAt(0).toUpperCase() + parts[0].slice(1).toLowerCase();
+    for (let i = 1; i < parts.length; i++) {
+      // non toccare troppi autori, solo l'epiteto
+      if (i === 1) {
+        parts[i] = parts[i].toLowerCase();
+      }
+    }
+  }
+  return parts.join(" ");
+}
+
+// --- 3. Normalizzazione base + deduplica ---
+document.getElementById('runBtn').addEventListener('click', function() {
+  const col = document.getElementById('columnSelect').value;
+  if (!col) return;
+
+  // crea mappa cleaned -> set di original
+  const map = new Map();
+
+  originalData.forEach(row => {
+    const original = row[col] || "";
+    const cleaned = cleanName(original);
+    if (!cleaned) return;
+
+    if (!map.has(cleaned)) {
+      map.set(cleaned, new Set());
+    }
+    map.get(cleaned).add(original);
+  });
+
+  normalized = Array.from(map.entries()).map(([cleaned, originalsSet]) => {
+    const originals = Array.from(originalsSet);
+    return {
+      cleaned_name: cleaned,
+      example_original: originals[0],
+      n_variants: originals.length
+      // QUI: hook per chiamare API POWO/WCVP o dizionario locale
+      // es: accepted_name, family, status...
+    };
+  });
+
+  renderTable(normalized);
+});
+
+// --- 4. Rendering tabella ---
+function renderTable(rows) {
+  const container = document.getElementById('tableContainer');
+  container.innerHTML = "";
+
+  const table = document.createElement('table');
+  const thead = document.createElement('thead');
+  const headerRow = document.createElement('tr');
+  ["cleaned_name", "example_original", "n_variants"].forEach(h => {
+    const th = document.createElement('th');
+    th.textContent = h;
+    headerRow.appendChild(th);
+  });
+  thead.appendChild(headerRow);
+  table.appendChild(thead);
+
+  const tbody = document.createElement('tbody');
+  rows.forEach(r => {
+    const tr = document.createElement('tr');
+    ["cleaned_name", "example_original", "n_variants"].forEach(k => {
+      const td = document.createElement('td');
+      td.textContent = r[k];
+      tr.appendChild(td);
+    });
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+
+  container.appendChild(table);
+
+  document.getElementById('resultsCard').style.display = 'block';
+  document.getElementById('resultSummary').innerText =
+    `Specie uniche (dopo cleaning): ${rows.length}`;
+}
+
+// --- 5. Download CSV ---
+document.getElementById('downloadBtn').addEventListener('click', function() {
+  if (!normalized || normalized.length === 0) return;
+
+  const header = ["cleaned_name", "example_original", "n_variants"];
+  const lines = [header.join(",")];
+
+  normalized.forEach(r => {
+    const row = header.map(h => {
+      const v = r[h] !== undefined ? String(r[h]) : "";
+      // escape CSV minimale
+      if (v.includes(",") || v.includes('"')) {
+        return '"' + v.replace(/"/g, '""') + '"';
+      }
+      return v;
+    }).join(",");
+    lines.push(row);
+  });
+
+  const blob = new Blob([lines.join("\n")], {type: "text/csv;charset=utf-8;"});
+  const url = URL.createObjectURL(blob);
+
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = "normalized_species.csv";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+});
+</script>
+</body>
+</html>
