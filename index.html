@@ -2,260 +2,479 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Plant Name Normalizer</title>
+  <title>Plant Nomenclature Standardization (POWO / WCVP)</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
 
   <!-- SheetJS per leggere Excel -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
   <style>
-    body {
+    :root {
       font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      margin: 2rem;
+      color-scheme: light;
+    }
+    body {
+      margin: 0;
+      padding: 1.5rem;
       max-width: 1200px;
+      margin-inline: auto;
+      background: #f5f5f7;
+      color: #222;
     }
     h1 {
       font-size: 1.6rem;
-      margin-bottom: 1rem;
+      margin-bottom: 0.3rem;
+    }
+    h2 {
+      font-size: 1.2rem;
+      margin: 0.5rem 0;
+    }
+    p {
+      margin: 0.3rem 0;
     }
     .card {
-      border: 1px solid #ddd;
-      border-radius: 12px;
+      background: #ffffff;
+      border-radius: 14px;
       padding: 1rem 1.2rem;
       margin-bottom: 1rem;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.04);
+      box-shadow: 0 2px 10px rgba(15,15,20,0.06);
+      border: 1px solid #e5e5ea;
     }
     label {
       display: block;
-      margin-bottom: 0.4rem;
+      margin-bottom: 0.3rem;
       font-weight: 600;
+      font-size: 0.9rem;
     }
-    select, input[type=file], button {
-      padding: 0.4rem 0.6rem;
-      font-size: 0.95rem;
-      margin-bottom: 0.6rem;
-    }
+    input[type="file"],
+    select,
     button {
+      font-size: 0.9rem;
+      padding: 0.4rem 0.6rem;
       border-radius: 8px;
       border: 1px solid #ccc;
+      margin-bottom: 0.4rem;
+    }
+    button {
+      background: #0f766e;
+      color: #fff;
+      border: none;
       cursor: pointer;
+      font-weight: 500;
+      margin-top: 0.3rem;
+    }
+    button.secondary {
+      background: #ffffff;
+      color: #333;
+      border: 1px solid #ccc;
+      margin-left: 0.3rem;
     }
     button:hover {
-      box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+      box-shadow: 0 2px 6px rgba(0,0,0,0.12);
+      transform: translateY(-1px);
+    }
+    button:disabled {
+      opacity: 0.5;
+      cursor: default;
+      box-shadow: none;
+      transform: none;
+    }
+    .small {
+      font-size: 0.78rem;
+      color: #666;
+    }
+    .status {
+      font-size: 0.8rem;
+      margin-top: 0.2rem;
+    }
+    .status.ok {
+      color: #166534;
+    }
+    .status.err {
+      color: #b91c1c;
     }
     table {
       border-collapse: collapse;
       width: 100%;
-      margin-top: 1rem;
-      font-size: 0.85rem;
+      font-size: 0.78rem;
+      margin-top: 0.6rem;
     }
     th, td {
       border: 1px solid #eee;
-      padding: 0.3rem 0.4rem;
+      padding: 0.25rem 0.35rem;
+      text-align: left;
+      vertical-align: top;
     }
     th {
-      background: #f7f7f7;
+      background: #f9fafb;
       font-weight: 600;
+      position: sticky;
+      top: 0;
+      z-index: 1;
     }
-    .small {
-      font-size: 0.8rem;
-      color: #666;
+    .tag {
+      display: inline-block;
+      padding: 0.05rem 0.35rem;
+      border-radius: 999px;
+      font-size: 0.7rem;
+      border: 1px solid #e5e7eb;
+      background: #f9fafb;
+      margin-right: 0.2rem;
+      margin-bottom: 0.1rem;
+    }
+    .layout-flex {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .nowrap {
+      white-space: nowrap;
+    }
+    @media (max-width: 768px) {
+      body {
+        padding: 1rem;
+      }
+      .layout-flex {
+        flex-direction: column;
+        align-items: flex-start;
+      }
     }
   </style>
 </head>
 <body>
-  <h1>Plant Name Normalizer (POWO-ready)</h1>
 
   <div class="card">
-    <label for="fileInput">1. Carica il file Excel</label>
+    <div class="layout-flex">
+      <div>
+        <h1>Plant Nomenclature Standardization</h1>
+        <p class="small">
+          Standardizza i nomi delle specie verso POWO / WCVP usando la tua API:
+          <code>https://plant-nomenclature-standardization.onrender.com/normalize</code>
+        </p>
+      </div>
+      <div>
+        <span class="tag">Upload Excel / CSV</span>
+        <span class="tag">POWO / WCVP</span>
+        <span class="tag">Synonyms &amp; Typos</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <label for="fileInput">1. Carica il file (.xlsx, .xls o .csv)</label>
     <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" />
     <div id="fileInfo" class="small"></div>
   </div>
 
-  <div class="card" id="columnSelectCard" style="display:none;">
+  <div class="card" id="columnCard" style="display:none;">
     <label for="columnSelect">2. Seleziona la colonna con i nomi delle specie</label>
     <select id="columnSelect"></select>
-    <div class="small">Puoi usare uno standard (es. <code>Species_name</code>) o scegliere manualmente.</div>
-    <button id="runBtn">3. Esegui normalizzazione di base</button>
+    <div class="small">
+      Suggerimento: usa una colonna chiamata ad esempio
+      <code>Species_name</code>, <code>Species</code>, <code>taxon</code>, ecc.
+    </div>
+    <button id="runBtn" disabled>3. Normalizza con POWO / WCVP</button>
+    <div id="prepStatus" class="status"></div>
   </div>
 
   <div class="card" id="resultsCard" style="display:none;">
-    <h2>Risultati</h2>
-    <div class="small">
-      Per ora: cleaning + deduplica. Qui collegherai il motore POWO/WCVP
-      (via API o dizionario locale).
+    <div class="layout-flex">
+      <div>
+        <h2>Risultati</h2>
+        <div id="resultSummary" class="small"></div>
+      </div>
+      <div>
+        <button id="downloadBtn" class="secondary" disabled>Scarica CSV</button>
+      </div>
     </div>
-    <div id="resultSummary" class="small"></div>
+    <div id="apiStatus" class="status"></div>
     <div id="tableContainer"></div>
-    <button id="downloadBtn">Scarica CSV normalizzato</button>
   </div>
 
 <script>
-let originalData = [];
-let normalized = [];
+  // URL della tua API remota
+  const API_URL = "https://plant-nomenclature-standardization.onrender.com/normalize";
 
-// --- 1. Lettura file ---
-document.getElementById('fileInput').addEventListener('change', function(e) {
-  const file = e.target.files[0];
-  if (!file) return;
+  let originalData = [];
+  let normalized = [];
 
-  const reader = new FileReader();
-  reader.onload = function(evt) {
-    const data = new Uint8Array(evt.target.result);
-    const workbook = XLSX.read(data, {type: 'array'});
-    const firstSheetName = workbook.SheetNames[0];
-    const sheet = workbook.Sheets[firstSheetName];
-    originalData = XLSX.utils.sheet_to_json(sheet, {defval: ""}); // array di oggetti
+  const fileInput = document.getElementById('fileInput');
+  const fileInfo = document.getElementById('fileInfo');
+  const columnCard = document.getElementById('columnCard');
+  const columnSelect = document.getElementById('columnSelect');
+  const runBtn = document.getElementById('runBtn');
+  const prepStatus = document.getElementById('prepStatus');
+  const resultsCard = document.getElementById('resultsCard');
+  const apiStatus = document.getElementById('apiStatus');
+  const tableContainer = document.getElementById('tableContainer');
+  const downloadBtn = document.getElementById('downloadBtn');
+  const resultSummary = document.getElementById('resultSummary');
 
-    document.getElementById('fileInfo').innerText =
-      `Foglio letto: ${firstSheetName} — ${originalData.length} righe`;
+  // --- 1. Lettura file ---
+  fileInput.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    resetAll(true);
+    if (!file) return;
 
-    populateColumnSelect(originalData);
-  };
-  reader.readAsArrayBuffer(file);
-});
+    const reader = new FileReader();
+    reader.onload = function(evt) {
+      const data = new Uint8Array(evt.target.result);
+      const wb = XLSX.read(data, {type: 'array'});
+      const sheetName = wb.SheetNames[0];
+      const sheet = wb.Sheets[sheetName];
+      originalData = XLSX.utils.sheet_to_json(sheet, {defval: ""});
 
-function populateColumnSelect(data) {
-  if (!data || data.length === 0) return;
-  const cols = Object.keys(data[0]);
-  const select = document.getElementById('columnSelect');
-  select.innerHTML = "";
-  cols.forEach(col => {
-    const opt = document.createElement('option');
-    opt.value = col;
-    opt.textContent = col;
-    if (col.toLowerCase().includes("species")) opt.selected = true;
-    select.appendChild(opt);
-  });
-  document.getElementById('columnSelectCard').style.display = 'block';
-}
-
-// --- 2. Cleaning base del nome ---
-function cleanName(name) {
-  if (!name) return "";
-  let x = String(name).trim();
-
-  // normalizza spazi
-  x = x.replace(/\s+/g, " ");
-
-  // rimuove cf., aff., sp., gruppo ecc (molto semplice, adattabile)
-  x = x.replace(/\b(cf\.|aff\.|nr\.|sp\.|spp\.|group|gr\.)\b/gi, "");
-  x = x.replace(/\?/g, "");
-
-  x = x.replace(/\s+/g, " ").trim();
-
-  // opzionale: normalizza maiuscole: Genere capitalizzato, resto minuscolo
-  const parts = x.split(" ");
-  if (parts.length > 0) {
-    parts[0] = parts[0].charAt(0).toUpperCase() + parts[0].slice(1).toLowerCase();
-    for (let i = 1; i < parts.length; i++) {
-      // non toccare troppi autori, solo l'epiteto
-      if (i === 1) {
-        parts[i] = parts[i].toLowerCase();
+      if (!originalData || originalData.length === 0) {
+        fileInfo.textContent = "File letto ma senza righe utili.";
+        return;
       }
-    }
-  }
-  return parts.join(" ");
-}
 
-// --- 3. Normalizzazione base + deduplica ---
-document.getElementById('runBtn').addEventListener('click', function() {
-  const col = document.getElementById('columnSelect').value;
-  if (!col) return;
-
-  // crea mappa cleaned -> set di original
-  const map = new Map();
-
-  originalData.forEach(row => {
-    const original = row[col] || "";
-    const cleaned = cleanName(original);
-    if (!cleaned) return;
-
-    if (!map.has(cleaned)) {
-      map.set(cleaned, new Set());
-    }
-    map.get(cleaned).add(original);
-  });
-
-  normalized = Array.from(map.entries()).map(([cleaned, originalsSet]) => {
-    const originals = Array.from(originalsSet);
-    return {
-      cleaned_name: cleaned,
-      example_original: originals[0],
-      n_variants: originals.length
-      // QUI: hook per chiamare API POWO/WCVP o dizionario locale
-      // es: accepted_name, family, status...
+      fileInfo.textContent = `Foglio: ${sheetName} — ${originalData.length} righe lette.`;
+      populateColumnSelect(Object.keys(originalData[0]));
     };
+    reader.readAsArrayBuffer(file);
   });
 
-  renderTable(normalized);
-});
+  function populateColumnSelect(cols) {
+    columnSelect.innerHTML = "";
+    if (!cols || cols.length === 0) {
+      prepStatus.textContent = "Nessuna colonna trovata nel file.";
+      return;
+    }
 
-// --- 4. Rendering tabella ---
-function renderTable(rows) {
-  const container = document.getElementById('tableContainer');
-  container.innerHTML = "";
-
-  const table = document.createElement('table');
-  const thead = document.createElement('thead');
-  const headerRow = document.createElement('tr');
-  ["cleaned_name", "example_original", "n_variants"].forEach(h => {
-    const th = document.createElement('th');
-    th.textContent = h;
-    headerRow.appendChild(th);
-  });
-  thead.appendChild(headerRow);
-  table.appendChild(thead);
-
-  const tbody = document.createElement('tbody');
-  rows.forEach(r => {
-    const tr = document.createElement('tr');
-    ["cleaned_name", "example_original", "n_variants"].forEach(k => {
-      const td = document.createElement('td');
-      td.textContent = r[k];
-      tr.appendChild(td);
+    cols.forEach(col => {
+      const opt = document.createElement('option');
+      opt.value = col;
+      opt.textContent = col;
+      columnSelect.appendChild(opt);
     });
-    tbody.appendChild(tr);
-  });
-  table.appendChild(tbody);
 
-  container.appendChild(table);
+    // tenta di selezionare automaticamente una colonna plausibile
+    const guess = cols.find(c =>
+      c.toLowerCase().includes("species") ||
+      c.toLowerCase().includes("taxon") ||
+      c.toLowerCase().includes("name")
+    );
+    if (guess) columnSelect.value = guess;
 
-  document.getElementById('resultsCard').style.display = 'block';
-  document.getElementById('resultSummary').innerText =
-    `Specie uniche (dopo cleaning): ${rows.length}`;
-}
+    columnCard.style.display = 'block';
+    prepStatus.textContent = "";
+    runBtn.disabled = false;
+  }
 
-// --- 5. Download CSV ---
-document.getElementById('downloadBtn').addEventListener('click', function() {
-  if (!normalized || normalized.length === 0) return;
+  // --- 2. Funzione di cleaning (client-side, parallela a R) ---
+  function cleanName(name) {
+    if (!name) return "";
+    let x = String(name).trim();
 
-  const header = ["cleaned_name", "example_original", "n_variants"];
-  const lines = [header.join(",")];
+    x = x.replace(/\s+/g, " ");
+    x = x.replace(/\b(cf\.|aff\.|nr\.|sp\.|spp\.|group|gr\.)\b/gi, "");
+    x = x.replace(/\?/g, "");
+    x = x.replace(/\s+/g, " ").trim();
 
-  normalized.forEach(r => {
-    const row = header.map(h => {
-      const v = r[h] !== undefined ? String(r[h]) : "";
-      // escape CSV minimale
-      if (v.includes(",") || v.includes('"')) {
-        return '"' + v.replace(/"/g, '""') + '"';
+    // Normalizza: Genere capitalizzato, epiteto minuscolo
+    const parts = x.split(" ");
+    if (parts.length > 0) {
+      parts[0] = parts[0].charAt(0).toUpperCase() + parts[0].slice(1).toLowerCase();
+      if (parts.length > 1) {
+        parts[1] = parts[1].toLowerCase();
       }
-      return v;
-    }).join(",");
-    lines.push(row);
+    }
+    return parts.join(" ");
+  }
+
+  // --- 3. Click "Normalizza" ---
+  runBtn.addEventListener('click', async () => {
+    const col = columnSelect.value;
+    if (!col) {
+      prepStatus.textContent = "Seleziona una colonna con i nomi delle specie.";
+      prepStatus.className = "status err";
+      return;
+    }
+
+    prepStatus.textContent = "";
+    apiStatus.textContent = "";
+    resultsCard.style.display = 'block';
+    tableContainer.innerHTML = "";
+    downloadBtn.disabled = true;
+
+    // Estrai nomi e pulisci
+    const submitted = [];
+    originalData.forEach(row => {
+      const raw = row[col];
+      const cleaned = cleanName(raw);
+      if (cleaned) submitted.push(cleaned);
+    });
+
+    if (submitted.length === 0) {
+      apiStatus.textContent = "Nessun nome valido trovato nella colonna selezionata.";
+      apiStatus.className = "status err";
+      return;
+    }
+
+    // Deduplica
+    const uniqueCleaned = Array.from(new Set(submitted));
+    resultSummary.textContent =
+      `Nomi letti: ${submitted.length} | Nomi unici (dopo cleaning): ${uniqueCleaned.length}`;
+
+    apiStatus.textContent = "Invio richiesta all'API...";
+    apiStatus.className = "status";
+
+    // Chiamata all'API remota
+    try {
+      const resp = await fetch(API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ names: uniqueCleaned })
+      });
+
+      const text = await resp.text();
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch (e) {
+        throw new Error("Risposta non in formato JSON: " + text.slice(0, 200));
+      }
+
+      if (!resp.ok) {
+        const msg = data && data.error ? data.error : text;
+        throw new Error(`API ${resp.status}: ${msg}`);
+      }
+
+      if (!Array.isArray(data)) {
+        if (data.error) {
+          throw new Error(data.error);
+        }
+        throw new Error("Formato risposta inatteso dall'API.");
+      }
+
+      normalized = data;
+      apiStatus.textContent = `API OK. Ricevute ${normalized.length} righe.`;
+      apiStatus.className = "status ok";
+
+      renderTable(normalized);
+      downloadBtn.disabled = false;
+
+    } catch (err) {
+      apiStatus.textContent = "Errore chiamando l'API: " + err.message;
+      apiStatus.className = "status err";
+      tableContainer.innerHTML = "";
+      downloadBtn.disabled = true;
+    }
   });
 
-  const blob = new Blob([lines.join("\n")], {type: "text/csv;charset=utf-8;"});
-  const url = URL.createObjectURL(blob);
+  // --- 4. Render tabella ---
+  function renderTable(rows) {
+    tableContainer.innerHTML = "";
+    if (!rows || rows.length === 0) {
+      tableContainer.textContent = "Nessun risultato da mostrare.";
+      return;
+    }
 
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = "normalized_species.csv";
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-});
+    const headers = [
+      "submitted",
+      "cleaned_name",
+      "matched_name",
+      "accepted_name",
+      "accepted_author",
+      "family",
+      "powo_uri",
+      "taxonomic_status",
+      "score",
+      "match_type"
+    ];
+
+    const table = document.createElement('table');
+    const thead = document.createElement('thead');
+    const hr = document.createElement('tr');
+    headers.forEach(h => {
+      const th = document.createElement('th');
+      th.textContent = h;
+      hr.appendChild(th);
+    });
+    thead.appendChild(hr);
+    table.appendChild(thead);
+
+    const tbody = document.createElement('tbody');
+    rows.forEach(r => {
+      const tr = document.createElement('tr');
+      headers.forEach(h => {
+        const td = document.createElement('td');
+        let val = r[h];
+        if (val === null || val === undefined) val = "";
+        td.textContent = val;
+        tr.appendChild(td);
+      });
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+
+    tableContainer.appendChild(table);
+  }
+
+  // --- 5. Download CSV ---
+  downloadBtn.addEventListener('click', () => {
+    if (!normalized || normalized.length === 0) return;
+
+    const headers = [
+      "submitted",
+      "cleaned_name",
+      "matched_name",
+      "accepted_name",
+      "accepted_author",
+      "family",
+      "powo_uri",
+      "taxonomic_status",
+      "score",
+      "match_type"
+    ];
+
+    const lines = [];
+    lines.push(headers.join(","));
+
+    normalized.forEach(r => {
+      const row = headers.map(h => {
+        const v = r[h] !== undefined && r[h] !== null ? String(r[h]) : "";
+        if (v.includes(",") || v.includes('"') || v.includes("\n")) {
+          return '"' + v.replace(/"/g, '""') + '"';
+        }
+        return v;
+      }).join(",");
+      lines.push(row);
+    });
+
+    const blob = new Blob([lines.join("\n")], {type: "text/csv;charset=utf-8;"});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = "normalized_species_powo.csv";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  });
+
+  // --- 6. Utility reset ---
+  function resetAll(keepFile = false) {
+    if (!keepFile) {
+      fileInput.value = "";
+      fileInfo.textContent = "";
+    }
+    originalData = [];
+    normalized = [];
+    columnCard.style.display = 'none';
+    resultsCard.style.display = 'none';
+    columnSelect.innerHTML = "";
+    runBtn.disabled = true;
+    prepStatus.textContent = "";
+    apiStatus.textContent = "";
+    tableContainer.innerHTML = "";
+    downloadBtn.disabled = true;
+    resultSummary.textContent = "";
+  }
 </script>
+
 </body>
 </html>
